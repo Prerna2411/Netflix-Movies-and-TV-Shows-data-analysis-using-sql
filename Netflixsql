@@ -1,0 +1,161 @@
+-- 15 Business Problems & Solutions
+/*
+1. Count the number of Movies vs TV Shows
+2. Find the most common rating for movies and TV shows
+3. List all movies released in a specific year (e.g., 2020)
+4. Find the top 5 countries with the most content on Netflix
+5. Identify the longest movie
+6. Find content added in the last 5 years
+7. Find all the movies/TV shows by director 'Rajiv Chilaka'!
+8. List all TV shows with more than 5 seasons
+9. Count the number of content items in each genre
+10.Find each year and the average numbers of content release in India on netflix. 
+return top 5 year with highest avg content release!
+11. List all movies that are documentaries
+12. Find all content without a director
+13. Find how many movies actor 'Salman Khan' appeared in last 10 years!
+14. Find the top 10 actors who have appeared in the highest number of movies produced in India.
+15.
+Categorize the content based on the presence of the keywords 'kill' and 'violence' in 
+the description field. Label content containing these keywords as 'Bad' and all other 
+content as 'Good'. Count how many items fall into each category.*/
+
+select * from netflix;
+
+select count(*) total_content from netflix;
+
+select distinct type from netflix;
+
+---1. Count the number of Movies vs TV Shows
+select type,count(*) total_content
+from netflix
+group by type;
+
+
+---2. Find the most common rating for movies and TV shows
+SELECT rating, COUNT(rating) AS count_of_rating
+FROM netflix
+GROUP BY rating
+ORDER BY count_of_rating DESC
+FETCH FIRST 1 ROWS ONLY;
+
+
+---3. List all movies released in a specific year (e.g., 2020)
+select count(*) from netflix 
+where type='Movie' and release_year=2020;
+
+
+---4. Find the top 5 countries with the most content on Netflix
+///CONNECT BY clause in Oracle enables hierarchical queries
+/////LEVEL pseudocolumn is used in hierarchical queries to represent the level of a node in a hierarchy. When used with the CONNECT BY clause, it allows us to generate rows recursively.
+select country,count(*) as total_content 
+from (
+    select trim(REGEXP_SUBSTR(country,'[^,]+',1,level)) as country from netflix
+    connect by level<=regexp_count(country,',')+1
+    
+        and prior rowid=rowid
+        AND PRIOR SYS_GUID() IS NOT NULL
+
+)
+where country is not null
+group by country
+order by total_content desc
+fetch first 5 rows only;
+
+-- 5. Identify the longest movie
+select * from netflix
+where type='Movie'
+and duration=(select max(duration) from netflix)
+order by to_number(regexp_substr(duration,'^\d+')) desc
+fetch first 1 rows only;
+
+-- 6. Find content added in the last 5 years
+select title,date_added from netflix
+where date_added>=SYSDATE - interval '5' year;
+
+-- 7. Find all the movies/TV shows by director 'Rajiv Chilaka'!
+select  title,director
+from(select trim(regexp_substr(director,'[^,+]',1,Level)) as director from netflix
+     connect Level<=regexp_count(director,',')+1
+        and prior rowid=rowid
+        AND PRIOR SYS_GUID() IS NOT NULL
+    WHERE director IS NOT NULL
+
+)
+where director='Rajiv Chilaka'
+group by title;
+
+-- 8. List all TV shows with more than 5 seasons
+
+select * from netflix 
+where type='TV Show'
+and to_number(substr(duration,1,instr(duration,' ')-1))>5;
+
+
+-- 9. Count the number of content items in each genre
+
+select genre,count(*) as total_content 
+from (
+    select trim(REGEXP_SUBSTR(listed_in,'[^,]+',1,level)) as genre from netflix
+    connect by level<=regexp_count(listed_in,',')+1
+    
+        and prior rowid=rowid
+        AND PRIOR SYS_GUID() IS NOT NULL
+
+)
+group by genre;
+
+
+-- 10. Find each year and the average numbers of content release by India on netflix. 
+-- return top 5 year with highest avg content release !
+select country,extract(year from date_added),count(show_id) as total_release,round(count(show_id)/(select count(show_id) from netflix where country='India')*100,2)as avg_content_release
+from netflix
+where country='India'
+group by country,extract(year from date_added)
+order by avg_content_release desc
+fetch first 5 rows only ;
+
+
+
+-- 11. List all movies that are documentaries
+SELECT * FROM netflix
+WHERE listed_in LIKE '%Documentaries'
+
+
+-- 12. Find all content without a director
+SELECT * FROM netflix
+WHERE director IS NULL
+
+WHERE cast LIKE
+-- 13. Find how many movies actor 'Salman Khan' appeared in last 10 years!
+SELECT * FROM netflix '%Salman Khan%'AND release_year > EXTRACT(YEAR FROM SYSDATE) - 10;
+
+---14. Find the top 10 actors who have appeared in the highest number of movies produced in India.
+select count(*),actors from(
+select trim(REGEXP_SUBSTR(cast,'[^,]+',1,level)) as actors from netflix
+    connect by level<=regexp_count(cast,',')+1
+    AND PRIOR ROWID = ROWID 
+    AND PRIOR SYS_GUID() IS NOT NULL
+)    
+group by actors
+order by  count(*) desc
+fetch first 10 rows only;
+
+/*
+15.Categorize the content based on the presence of the keywords 'kill' and 'violence' in 
+the description field. Label content containing these keywords as 'Bad' and all other 
+content as 'Good'. Count how many items fall into each category.
+*/
+
+WITH new_table AS(
+    SELECT *,
+        CASE 
+            WHEN description LIKE '%kill%' OR description LIKE '%vio%' THEN 'BAD'
+            ELSE 'GOOD'
+        END AS category
+    FROM netflix
+)
+SELECT category, COUNT(*) AS total_count
+FROM new_table
+GROUP BY category;
+
